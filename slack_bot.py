@@ -209,7 +209,7 @@ def generate_with_loading_update(client, channel_id, ts, user_message, index, he
     
     return response
 
-@app.command("/tellboss")
+@app.command("/tellboss", methods=["POST", "GET"])
 def handle_tellboss_command(ack, say, command, logger, client):
     ack()
     
@@ -241,7 +241,7 @@ def handle_tellboss_command(ack, say, command, logger, client):
         is_link
     )
 
-@app.command("/tldr")
+@app.command("/tldr", methods=["POST", "GET"])
 def handle_tldr_command(ack, say, command, logger, client):
     ack()
     
@@ -273,7 +273,7 @@ def handle_tldr_command(ack, say, command, logger, client):
         is_link
     )
 
-@app.command("/befr")
+@app.command("/befr", methods=["POST", "GET"])
 def handle_befr_command(ack, say, command, logger, client):
     ack()
     
@@ -305,7 +305,7 @@ def handle_befr_command(ack, say, command, logger, client):
         is_link
     )
 
-@app.command("/clear")
+@app.command("/clear", methods=["POST", "GET"])
 def handle_clear_command(ack, say, command, logger, client):
     ack()
     channel_id = command['channel_id']

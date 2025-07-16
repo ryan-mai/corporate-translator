@@ -432,10 +432,22 @@ def home():
     </html>
     """
 
+@flask_app.route("/status")
+def status():
+    from flask import jsonify
+    return jsonify({
+        "status": "active",
+        "bot": "Corporate Translator Bot",
+        "commands": ["/tellboss", "/tldr", "/befr", "/clear"],
+        "timestamp": time.time()
+    })
 
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
+    print(f"Received Slack event: {request.headers.get('X-Slack-Signature', 'No signature')}")
+    
     if request.json and "challenge" in request.json:
+        print("Handling URL verification challenge")
         return request.json["challenge"]
     
     if not signature_verifier.is_valid(
@@ -443,8 +455,10 @@ def slack_events():
         request.headers.get("X-Slack-Signature", ""),
         request.get_data().decode("utf-8")
     ):
+        print("Signature verification failed")
         return "Unauthorized", 401
     
+    print("Signature verified, handling event")
     return handler.handle(request)
 
 if __name__ == "__main__":

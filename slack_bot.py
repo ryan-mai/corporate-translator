@@ -318,7 +318,7 @@ def handle_clear_command(ack, say, command, logger, client):
             response = client.conversations_history(channel=channel_id, limit=200, cursor=cursor)
             messages = response['messages']
             cursor = response.get('response_metadata', {}).get('next_cursor')
-            has_messages = response.get('has_more', False)
+            has_messages = response.get('has_messages', False)
 
             for message in messages:
                 try:
@@ -415,7 +415,6 @@ def handle_regenerate_email(ack, body, say, logger, client):
         user_id
     )
 
-
 @flask_app.route("/")
 def home():
     return """
@@ -432,22 +431,11 @@ def home():
     </html>
     """
 
-@flask_app.route("/status")
-def status():
-    from flask import jsonify
-    return jsonify({
-        "status": "active",
-        "bot": "Corporate Translator Bot",
-        "commands": ["/tellboss", "/tldr", "/befr", "/clear"],
-        "timestamp": time.time()
-    })
-
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
     print(f"Received Slack event: {request.headers.get('X-Slack-Signature', 'No signature')}")
     print(f"Content-Type: {request.headers.get('Content-Type', 'No content type')}")
     
-    # Let the SlackRequestHandler handle everything
     return handler.handle(request)
 
 if __name__ == "__main__":

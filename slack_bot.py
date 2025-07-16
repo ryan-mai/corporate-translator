@@ -710,21 +710,38 @@ def slack_events():
         return {"error": "Empty request body"}, 400
     
     try:
-        # Try to parse JSON
-        try:
-            request_data = request.get_json()
-            logger.info(f"Request data keys: {list(request_data.keys()) if request_data else 'None'}")
-        except Exception as json_error:
-            logger.error(f"Failed to parse JSON: {str(json_error)}")
-            logger.error(f"Raw request data: {request_body}")
-            return {"error": "Invalid JSON"}, 400
+        # Check content type to determine how to parse the request
+        content_type = request.headers.get('Content-Type', '')
+        logger.info(f"Content-Type: {content_type}")
         
-        if request_data and "challenge" in request_data:
-            logger.info("Handling URL verification challenge")
-            return request_data["challenge"]
-        
-        logger.info("Handling Slack event")
-        return handler.handle(request)
+        if 'application/json' in content_type:
+            # Handle JSON requests (events, interactive components)
+            try:
+                request_data = request.get_json()
+                logger.info(f"Request data keys: {list(request_data.keys()) if request_data else 'None'}")
+                
+                if request_data and "challenge" in request_data:
+                    logger.info("Handling URL verification challenge")
+                    return request_data["challenge"]
+                
+                logger.info("Handling Slack JSON event")
+                return handler.handle(request)
+                
+            except Exception as json_error:
+                logger.error(f"Failed to parse JSON: {str(json_error)}")
+                logger.error(f"Raw request data: {request_body}")
+                return {"error": "Invalid JSON"}, 400
+                
+        elif 'application/x-www-form-urlencoded' in content_type:
+            # Handle form-encoded requests (slash commands)
+            logger.info("Handling Slack form-encoded request (slash command)")
+            return handler.handle(request)
+            
+        else:
+            logger.warning(f"Unexpected content type: {content_type}")
+            # Try to handle anyway
+            return handler.handle(request)
+            
     except Exception as e:
         logger.error(f"Error in slack_events: {str(e)}")
         import traceback

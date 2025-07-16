@@ -6,10 +6,14 @@ from slack_bolt.adapter.flask import SlackRequestHandler
 from flask import Flask, request
 from translator import generate
 from slack_sdk.errors import SlackApiError
+from slack_sdk.signature import SignatureVerifier
 
 app = App(token=os.environ["SLACK_BOT_TOKEN"])
 flask_app = Flask(__name__)
 handler = SlackRequestHandler(app)
+
+# Add signature verifier
+signature_verifier = SignatureVerifier(os.environ.get("SLACK_SIGNING_SECRET", ""))
 
 def format_quoted_message(message):
     lines = message.split('\n')
@@ -462,12 +466,35 @@ def home():
     </html>
     """
 
+@flask_app.route("/status")
+def status():
+    from flask import jsonify
+    return jsonify({
+        "status": "active",
+        "bot": "Corporate Translator Bot",
+        "commands": ["/tellboss", "/tldr", "/befr", "/clear"],
+        "timestamp": time.time()
+    })
+
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
+    print(f"Received Slack event: {request.headers.get('X-Slack-Signature', 'No signature')}")
+    
     # Handle URL verification challenge
     if request.json and "challenge" in request.json:
+        print("Handling URL verification challenge")
         return request.json["challenge"]
     
+    # Verify signature for security
+    if not signature_verifier.is_valid(
+        request.headers.get("X-Slack-Request-Timestamp", ""),
+        request.headers.get("X-Slack-Signature", ""),
+        request.get_data().decode("utf-8")
+    ):
+        print("Signature verification failed")
+        return "Unauthorized", 401
+    
+    print("Signature verified, handling event")
     return handler.handle(request)
 
 if __name__ == "__main__":

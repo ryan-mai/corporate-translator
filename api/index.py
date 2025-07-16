@@ -412,13 +412,9 @@ def handle_regenerate_email(ack, body, say, logger, client):
         user_id
     )
 
-
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
     return handler.handle(request)
 
-if __name__ == "__main__":
-    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
-
 # For Vercel deployment
-app = flask_app
+app = flask_app 

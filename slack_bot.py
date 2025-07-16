@@ -413,12 +413,58 @@ def handle_regenerate_email(ack, body, say, logger, client):
     )
 
 
+@flask_app.route("/")
+def home():
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Corporate Translator Bot</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }
+            .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            h1 { color: #2c3e50; text-align: center; }
+            .status { background: #27ae60; color: white; padding: 10px; border-radius: 5px; text-align: center; margin: 20px 0; }
+            .commands { background: #ecf0f1; padding: 20px; border-radius: 5px; margin: 20px 0; }
+            .command { margin: 10px 0; padding: 10px; background: white; border-left: 4px solid #3498db; }
+            code { background: #f8f9fa; padding: 2px 4px; border-radius: 3px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🤖 Corporate Translator Bot</h1>
+            <div class="status">
+                ✅ Bot is running and ready to translate your corporate speak!
+            </div>
+            <div class="commands">
+                <h3>Available Commands:</h3>
+                <div class="command">
+                    <strong>/tellboss</strong> - Translate your message into professional corporate speak
+                    <br><code>Example: /tellboss Gimme a raise</code>
+                </div>
+                <div class="command">
+                    <strong>/tldr</strong> - Translate boss's corporate speak into plain English
+                    <br><code>Example: /tldr Let's circle back to this after we align on our Q3 priorities</code>
+                </div>
+                <div class="command">
+                    <strong>/befr</strong> - Translate boss's message into what they actually mean
+                    <br><code>Example: /befr We need to optimize our workflow</code>
+                </div>
+                <div class="command">
+                    <strong>/clear</strong> - Clear all messages in the current channel
+                </div>
+            </div>
+            <p style="text-align: center; color: #7f8c8d;">
+                Add this bot to your Slack workspace to start translating corporate speak! 🚀
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
     return handler.handle(request)
 
 if __name__ == "__main__":
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
-
-# For Vercel deployment
-app = flask_app

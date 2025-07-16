@@ -306,14 +306,14 @@ def handle_clear_command(ack, say, command, logger, client):
     user_id = command['user_id']
 
     try:
-        has_messsage = True
+        has_messages = True
         cursor = None
 
-        while has_messsage:
+        while has_messages:
             response = client.conversations_history(channel=channel_id, limit=200, cursor=cursor)
             messages = response['messages']
             cursor = response.get('response_metadata', {}).get('next_cursor')
-            has_messsage = response.get('has_messsage', False)
+            has_messages = response.get('has_more', False)
 
             for message in messages:
                 try:
@@ -322,7 +322,7 @@ def handle_clear_command(ack, say, command, logger, client):
                     time.sleep(0.69)
                 except SlackApiError as e:
                     logger.warning(f"Can't delete message - {e.response['error']} 👀 (Your boss is going to find out!!!)")
-                    has_messsage = False
+                    has_messages = False
                     break
                     
 

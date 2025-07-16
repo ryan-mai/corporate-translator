@@ -6,14 +6,15 @@ from slack_bolt.adapter.flask import SlackRequestHandler
 from flask import Flask, request
 from translator import generate
 from slack_sdk.errors import SlackApiError
-from slack_sdk.signature import SignatureVerifier
+from slack_sdk import WebClient
+from slackeventsapi import SlackEventAdapter
 
-app = App(token=os.environ["SLACK_BOT_TOKEN"])
-flask_app = Flask(__name__)
+app = Flask(__name__)
+slack_events_adapter = SlackEventAdapter(os.environ["SLACK_SIGNING_SECRET"], "/slack/events", app)
+
+client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
 handler = SlackRequestHandler(app)
 
-# Add signature verifier
-signature_verifier = SignatureVerifier(os.environ.get("SLACK_SIGNING_SECRET", ""))
 
 def format_quoted_message(message):
     lines = message.split('\n')
@@ -312,14 +313,14 @@ def handle_clear_command(ack, say, command, logger, client):
     user_id = command['user_id']
 
     try:
-        has_messsage = True
+        has_messages = True
         cursor = None
 
-        while has_messsage:
+        while has_messages:
             response = client.conversations_history(channel=channel_id, limit=200, cursor=cursor)
             messages = response['messages']
             cursor = response.get('response_metadata', {}).get('next_cursor')
-            has_messsage = response.get('has_messsage', False)
+            has_messages = response.get('has_more', False)
 
             for message in messages:
                 try:
@@ -328,7 +329,7 @@ def handle_clear_command(ack, say, command, logger, client):
                     time.sleep(0.69)
                 except SlackApiError as e:
                     logger.warning(f"Can't delete message - {e.response['error']} 👀 (Your boss is going to find out!!!)")
-                    has_messsage = False
+                    has_messages = False
                     break
                     
 
@@ -417,7 +418,7 @@ def handle_regenerate_email(ack, body, say, logger, client):
     )
 
 
-@flask_app.route("/")
+@app.route("/")
 def home():
     return """
     <!DOCTYPE html>
@@ -466,72 +467,12 @@ def home():
     </html>
     """
 
-@flask_app.route("/status")
-def status():
-    from flask import jsonify
-    return jsonify({
-        "status": "active",
-        "bot": "Corporate Translator Bot",
-        "commands": ["/tellboss", "/tldr", "/befr", "/clear"],
-        "timestamp": time.time()
-    })
-
-@flask_app.route("/tellboss", methods=["POST", "GET"])
-def tellboss_direct():
-    from flask import jsonify
-    return jsonify({
-        "error": "This endpoint is not for direct HTTP requests",
-        "message": "Use /tellboss command in Slack instead",
-        "usage": "Add this bot to your Slack workspace and use: /tellboss [your message]"
-    }), 400
-
-@flask_app.route("/tldr", methods=["POST", "GET"])
-def tldr_direct():
-    from flask import jsonify
-    return jsonify({
-        "error": "This endpoint is not for direct HTTP requests",
-        "message": "Use /tldr command in Slack instead",
-        "usage": "Add this bot to your Slack workspace and use: /tldr [boss's message]"
-    }), 400
-
-@flask_app.route("/befr", methods=["POST", "GET"])
-def befr_direct():
-    from flask import jsonify
-    return jsonify({
-        "error": "This endpoint is not for direct HTTP requests",
-        "message": "Use /befr command in Slack instead",
-        "usage": "Add this bot to your Slack workspace and use: /befr [boss's message]"
-    }), 400
-
-@flask_app.route("/clear", methods=["POST", "GET"])
-def clear_direct():
-    from flask import jsonify
-    return jsonify({
-        "error": "This endpoint is not for direct HTTP requests",
-        "message": "Use /clear command in Slack instead",
-        "usage": "Add this bot to your Slack workspace and use: /clear"
-    }), 400
-
-@flask_app.route("/slack/events", methods=["POST"])
+@app.route("/slack/events", methods=["POST"])
 def slack_events():
-    print(f"Received Slack event: {request.headers.get('X-Slack-Signature', 'No signature')}")
-    
-    # Handle URL verification challenge
     if request.json and "challenge" in request.json:
-        print("Handling URL verification challenge")
         return request.json["challenge"]
     
-    # Verify signature for security
-    if not signature_verifier.is_valid(
-        request.headers.get("X-Slack-Request-Timestamp", ""),
-        request.headers.get("X-Slack-Signature", ""),
-        request.get_data().decode("utf-8")
-    ):
-        print("Signature verification failed")
-        return "Unauthorized", 401
-    
-    print("Signature verified, handling event")
     return handler.handle(request)
 
 if __name__ == "__main__":
-    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))

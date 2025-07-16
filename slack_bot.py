@@ -209,7 +209,7 @@ def generate_with_loading_update(client, channel_id, ts, user_message, index, he
     
     return response
 
-@app.command("/tellboss", methods=["POST", "GET"])
+@app.command("/tellboss")
 def handle_tellboss_command(ack, say, command, logger, client):
     ack()
     
@@ -241,7 +241,7 @@ def handle_tellboss_command(ack, say, command, logger, client):
         is_link
     )
 
-@app.command("/tldr", methods=["POST", "GET"])
+@app.command("/tldr")
 def handle_tldr_command(ack, say, command, logger, client):
     ack()
     
@@ -273,7 +273,7 @@ def handle_tldr_command(ack, say, command, logger, client):
         is_link
     )
 
-@app.command("/befr", methods=["POST", "GET"])
+@app.command("/befr")
 def handle_befr_command(ack, say, command, logger, client):
     ack()
     
@@ -305,7 +305,7 @@ def handle_befr_command(ack, say, command, logger, client):
         is_link
     )
 
-@app.command("/clear", methods=["POST", "GET"])
+@app.command("/clear")
 def handle_clear_command(ack, say, command, logger, client):
     ack()
     channel_id = command['channel_id']
@@ -475,6 +475,42 @@ def status():
         "commands": ["/tellboss", "/tldr", "/befr", "/clear"],
         "timestamp": time.time()
     })
+
+@flask_app.route("/tellboss", methods=["POST", "GET"])
+def tellboss_direct():
+    from flask import jsonify
+    return jsonify({
+        "error": "This endpoint is not for direct HTTP requests",
+        "message": "Use /tellboss command in Slack instead",
+        "usage": "Add this bot to your Slack workspace and use: /tellboss [your message]"
+    }), 400
+
+@flask_app.route("/tldr", methods=["POST", "GET"])
+def tldr_direct():
+    from flask import jsonify
+    return jsonify({
+        "error": "This endpoint is not for direct HTTP requests",
+        "message": "Use /tldr command in Slack instead",
+        "usage": "Add this bot to your Slack workspace and use: /tldr [boss's message]"
+    }), 400
+
+@flask_app.route("/befr", methods=["POST", "GET"])
+def befr_direct():
+    from flask import jsonify
+    return jsonify({
+        "error": "This endpoint is not for direct HTTP requests",
+        "message": "Use /befr command in Slack instead",
+        "usage": "Add this bot to your Slack workspace and use: /befr [boss's message]"
+    }), 400
+
+@flask_app.route("/clear", methods=["POST", "GET"])
+def clear_direct():
+    from flask import jsonify
+    return jsonify({
+        "error": "This endpoint is not for direct HTTP requests",
+        "message": "Use /clear command in Slack instead",
+        "usage": "Add this bot to your Slack workspace and use: /clear"
+    }), 400
 
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():

@@ -9,10 +9,19 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk import WebClient
 from slackeventsapi import SlackEventAdapter
 
-app = Flask(__name__)
-slack_events_adapter = SlackEventAdapter(os.environ["SLACK_SIGNING_SECRET"], "/slack/events", app)
+# Create Flask app
+flask_app = Flask(__name__)
 
+# Create Slack Bolt app
+app = App(token=os.environ["SLACK_BOT_TOKEN"])
+
+# Create Slack events adapter
+slack_events_adapter = SlackEventAdapter(os.environ["SLACK_SIGNING_SECRET"], "/slack/events", flask_app)
+
+# Create Slack client
 client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
+
+# Create handler
 handler = SlackRequestHandler(app)
 
 
@@ -418,7 +427,7 @@ def handle_regenerate_email(ack, body, say, logger, client):
     )
 
 
-@app.route("/")
+@flask_app.route("/")
 def home():
     return """
     <!DOCTYPE html>
@@ -467,7 +476,7 @@ def home():
     </html>
     """
 
-@app.route("/slack/events", methods=["POST"])
+@flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
     if request.json and "challenge" in request.json:
         return request.json["challenge"]
@@ -475,4 +484,4 @@ def slack_events():
     return handler.handle(request)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))

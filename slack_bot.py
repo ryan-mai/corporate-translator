@@ -318,7 +318,7 @@ def handle_clear_command(ack, say, command, logger, client):
             response = client.conversations_history(channel=channel_id, limit=200, cursor=cursor)
             messages = response['messages']
             cursor = response.get('response_metadata', {}).get('next_cursor')
-            has_messages = response.get('has_messages', False)
+            has_messages = response.get('has_more', False)
 
             for message in messages:
                 try:
@@ -445,20 +445,9 @@ def status():
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
     print(f"Received Slack event: {request.headers.get('X-Slack-Signature', 'No signature')}")
+    print(f"Content-Type: {request.headers.get('Content-Type', 'No content type')}")
     
-    if request.json and "challenge" in request.json:
-        print("Handling URL verification challenge")
-        return request.json["challenge"]
-    
-    if not signature_verifier.is_valid(
-        request.headers.get("X-Slack-Request-Timestamp", ""),
-        request.headers.get("X-Slack-Signature", ""),
-        request.get_data().decode("utf-8")
-    ):
-        print("Signature verification failed")
-        return "Unauthorized", 401
-    
-    print("Signature verified, handling event")
+    # Let the SlackRequestHandler handle everything
     return handler.handle(request)
 
 if __name__ == "__main__":

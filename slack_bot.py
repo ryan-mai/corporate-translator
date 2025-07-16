@@ -464,6 +464,10 @@ def home():
 
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
+    # Handle URL verification challenge
+    if request.json and "challenge" in request.json:
+        return request.json["challenge"]
+    
     return handler.handle(request)
 
 if __name__ == "__main__":

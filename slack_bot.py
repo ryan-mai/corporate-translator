@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import logging
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 from flask import Flask, request
@@ -9,20 +10,41 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk import WebClient
 from slackeventsapi import SlackEventAdapter
 
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Create Flask app
 flask_app = Flask(__name__)
 
 # Create Slack Bolt app
-app = App(token=os.environ["SLACK_BOT_TOKEN"])
+bot_token = os.environ.get("SLACK_BOT_TOKEN")
+if not bot_token:
+    logger.error("SLACK_BOT_TOKEN environment variable is not set")
+    raise ValueError("SLACK_BOT_TOKEN environment variable is required")
+
+app = App(token=bot_token)
+logger.info("Slack Bolt app created successfully")
 
 # Create Slack events adapter
-slack_events_adapter = SlackEventAdapter(os.environ["SLACK_SIGNING_SECRET"], "/slack/events", flask_app)
+signing_secret = os.environ.get("SLACK_SIGNING_SECRET")
+if not signing_secret:
+    logger.error("SLACK_SIGNING_SECRET environment variable is not set")
+    raise ValueError("SLACK_SIGNING_SECRET environment variable is required")
+
+slack_events_adapter = SlackEventAdapter(signing_secret, "/slack/events", flask_app)
+logger.info("Slack events adapter created successfully")
 
 # Create Slack client
-client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
+client = WebClient(token=bot_token)
+logger.info("Slack WebClient created successfully")
 
 # Create handler
 handler = SlackRequestHandler(app)
+logger.info("Slack request handler created successfully")
 
 
 def format_quoted_message(message):
@@ -197,123 +219,166 @@ def create_final_blocks(header_text, user_message, input_description, user_id, r
     return blocks
 
 def generate_with_loading_update(client, channel_id, ts, user_message, index, header_text, input_description, user_id, is_link=False):
-    loading_blocks = create_loading_blocks(header_text, user_message, input_description, user_id, is_link)
-    
-    client.chat_update(
-        channel=channel_id,
-        ts=ts,
-        blocks=loading_blocks,
-        text="Generating response to your annoying boss... 👊"
-    )
-    
-    response = generate(user_message, index)
-    
-    final_blocks = create_final_blocks(header_text, user_message, input_description, user_id, response, index, is_link)
-    
-    client.chat_update(
-        channel=channel_id,
-        ts=ts,
-        blocks=final_blocks,
-        text=f"Generated response: {response}"
-    )
-    
-    return response
+    try:
+        loading_blocks = create_loading_blocks(header_text, user_message, input_description, user_id, is_link)
+        
+        client.chat_update(
+            channel=channel_id,
+            ts=ts,
+            blocks=loading_blocks,
+            text="Generating response to your annoying boss... 👊"
+        )
+        
+        response = generate(user_message, index)
+        
+        if not response or response.strip() == "":
+            raise Exception("AI generated an empty response")
+        
+        final_blocks = create_final_blocks(header_text, user_message, input_description, user_id, response, index, is_link)
+        
+        client.chat_update(
+            channel=channel_id,
+            ts=ts,
+            blocks=final_blocks,
+            text=f"Generated response: {response}"
+        )
+        
+        return response
+    except Exception as e:
+        error_blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"❌ *Error generating response:* {str(e)}"
+                }
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"Requested by <@{user_id}> | Corporate Translator"
+                    }
+                ]
+            }
+        ]
+        
+        client.chat_update(
+            channel=channel_id,
+            ts=ts,
+            blocks=error_blocks,
+            text=f"Error: {str(e)}"
+        )
+        raise e
 
 @app.command("/tellboss")
 def handle_tellboss_command(ack, say, command, logger, client):
-    ack()
-    
-    user_input = command["text"]
-    if not user_input or user_input.strip() == "":
-        say("Usage: `/tellboss [your message or Slack message link]`\nExample: `/tellboss Gimme a raise`")
-        return
-    
-    user_message, is_link = process_input(client, user_input)
-    
-    if is_link and user_message is None:
-        say("❌ Please send a valid link or check again!")
-        return
-    
-    input_description = "Message from link" if is_link else "Your Message"
-    header_text = "📢 Message for Your Boss 😁"
-    
-    initial_response = say(text="Sending your request to AI 🤖...", blocks=[])
-    
-    generate_with_loading_update(
-        client, 
-        command['channel_id'], 
-        initial_response['ts'], 
-        user_message, 
-        0, 
-        header_text, 
-        input_description, 
-        command['user_id'], 
-        is_link
-    )
+    try:
+        ack()
+        
+        user_input = command["text"]
+        if not user_input or user_input.strip() == "":
+            say("Usage: `/tellboss [your message or Slack message link]`\nExample: `/tellboss Gimme a raise`")
+            return
+        
+        user_message, is_link = process_input(client, user_input)
+        
+        if is_link and user_message is None:
+            say("❌ Please send a valid link or check again!")
+            return
+        
+        input_description = "Message from link" if is_link else "Your Message"
+        header_text = "📢 Message for Your Boss 😁"
+        
+        initial_response = say(text="Sending your request to AI 🤖...", blocks=[])
+        
+        generate_with_loading_update(
+            client, 
+            command['channel_id'], 
+            initial_response['ts'], 
+            user_message, 
+            0, 
+            header_text, 
+            input_description, 
+            command['user_id'], 
+            is_link
+        )
+    except Exception as e:
+        logger.error(f"Error in /tellboss command: {str(e)}")
+        say(f"❌ Sorry, something went wrong: {str(e)}")
 
 @app.command("/tldr")
 def handle_tldr_command(ack, say, command, logger, client):
-    ack()
-    
-    user_input = command["text"]
-    if not user_input or user_input.strip() == "":
-        say("Usage: `/tldr [your message or Slack message link]`\nExample: `/tldr Let's circle back to this after we align on our Q3 priorities.`\nOr: `/tldr https://workspace.slack.com/archives/C1234567890/p1234567890123456`")
-        return
-    
-    user_message, is_link = process_input(client, user_input)
-    
-    if is_link and user_message is None:
-        say("❌ Please send a valid link or check again!")
-        return
-    
-    input_description = "Message from link" if is_link else "Boss's Message"
-    header_text = "📢 Message from your Boss 😡"
-    
-    initial_response = say(text="Processing your request...", blocks=[])
-    
-    generate_with_loading_update(
-        client, 
-        command['channel_id'], 
-        initial_response['ts'], 
-        user_message, 
-        1, 
-        header_text, 
-        input_description, 
-        command['user_id'], 
-        is_link
-    )
+    try:
+        ack()
+        
+        user_input = command["text"]
+        if not user_input or user_input.strip() == "":
+            say("Usage: `/tldr [your message or Slack message link]`\nExample: `/tldr Let's circle back to this after we align on our Q3 priorities.`\nOr: `/tldr https://workspace.slack.com/archives/C1234567890/p1234567890123456`")
+            return
+        
+        user_message, is_link = process_input(client, user_input)
+        
+        if is_link and user_message is None:
+            say("❌ Please send a valid link or check again!")
+            return
+        
+        input_description = "Message from link" if is_link else "Boss's Message"
+        header_text = "📢 Message from your Boss 😡"
+        
+        initial_response = say(text="Processing your request...", blocks=[])
+        
+        generate_with_loading_update(
+            client, 
+            command['channel_id'], 
+            initial_response['ts'], 
+            user_message, 
+            1, 
+            header_text, 
+            input_description, 
+            command['user_id'], 
+            is_link
+        )
+    except Exception as e:
+        logger.error(f"Error in /tldr command: {str(e)}")
+        say(f"❌ Sorry, something went wrong: {str(e)}")
 
 @app.command("/befr")
 def handle_befr_command(ack, say, command, logger, client):
-    ack()
-    
-    user_input = command["text"]
-    if not user_input or user_input.strip() == "":
-        say("Usage: `/befr [your message or Slack message link]`\nExample: `/befr Let's circle back to this after we align on our Q3 priorities.`")
-        return
-    
-    user_message, is_link = process_input(client, user_input)
-    
-    if is_link and user_message is None:
-        say("❌ Please send a valid link or check again!")
-        return
-    
-    input_description = "Message from link" if is_link else "Boss's Message"
-    header_text = "📢 What your boss actually means 🙄"
-    
-    initial_response = say(text="Processing your request...", blocks=[])
-    
-    generate_with_loading_update(
-        client, 
-        command['channel_id'], 
-        initial_response['ts'], 
-        user_message, 
-        2, 
-        header_text, 
-        input_description, 
-        command['user_id'], 
-        is_link
-    )
+    try:
+        ack()
+        
+        user_input = command["text"]
+        if not user_input or user_input.strip() == "":
+            say("Usage: `/befr [your message or Slack message link]`\nExample: `/befr Let's circle back to this after we align on our Q3 priorities.`")
+            return
+        
+        user_message, is_link = process_input(client, user_input)
+        
+        if is_link and user_message is None:
+            say("❌ Please send a valid link or check again!")
+            return
+        
+        input_description = "Message from link" if is_link else "Boss's Message"
+        header_text = "📢 What your boss actually means 🙄"
+        
+        initial_response = say(text="Processing your request...", blocks=[])
+        
+        generate_with_loading_update(
+            client, 
+            command['channel_id'], 
+            initial_response['ts'], 
+            user_message, 
+            2, 
+            header_text, 
+            input_description, 
+            command['user_id'], 
+            is_link
+        )
+    except Exception as e:
+        logger.error(f"Error in /befr command: {str(e)}")
+        say(f"❌ Sorry, something went wrong: {str(e)}")
 
 @app.command("/clear")
 def handle_clear_command(ack, say, command, logger, client):
@@ -350,81 +415,97 @@ def handle_clear_command(ack, say, command, logger, client):
 
 @app.action("use_message")
 def handle_use_message(ack, body, say, logger):
-    ack()
-    message = body["actions"][0]["value"]
-    user_id = body["user"]["id"]
-    say(f"✅ <@{user_id}> used this message: \n\n{format_quoted_message(message)}")
+    try:
+        ack()
+        message = body["actions"][0]["value"]
+        user_id = body["user"]["id"]
+        say(f"✅ <@{user_id}> used this message: \n\n{format_quoted_message(message)}")
+    except Exception as e:
+        logger.error(f"Error in use_message action: {str(e)}")
+        say(f"❌ Sorry, something went wrong: {str(e)}")
 
 @app.action("regenerate_message")
 def handle_regenerate_message(ack, body, say, logger, client):
-    ack()
-    message_with_index = body["actions"][0]["value"]
-    user_id = body["user"]["id"]
-    channel_id = body["channel"]["id"]
-    
-    parts = message_with_index.split("|")
-    original_message = parts[0]
-    index = int(parts[1]) if len(parts) > 1 else 0
-    
-    if index == 0:
-        header_text = "🔄 Regenerated Message for Your Boss 😁"
-    elif index == 1:
-        header_text = "🔄 Regenerated Message from Your Boss 😡"
-    else:
-        header_text = "🔄 Regenerated - What your boss actually means 🙄"
-    
-    initial_response = say(text="Regenerating...", blocks=[])
-    
-    generate_with_loading_update(
-        client, 
-        channel_id, 
-        initial_response['ts'], 
-        original_message, 
-        index, 
-        header_text, 
-        "Original Message", 
-        user_id
-    )
+    try:
+        ack()
+        message_with_index = body["actions"][0]["value"]
+        user_id = body["user"]["id"]
+        channel_id = body["channel"]["id"]
+        
+        parts = message_with_index.split("|")
+        original_message = parts[0]
+        index = int(parts[1]) if len(parts) > 1 else 0
+        
+        if index == 0:
+            header_text = "🔄 Regenerated Message for Your Boss 😁"
+        elif index == 1:
+            header_text = "🔄 Regenerated Message from Your Boss 😡"
+        else:
+            header_text = "🔄 Regenerated - What your boss actually means 🙄"
+        
+        initial_response = say(text="Regenerating...", blocks=[])
+        
+        generate_with_loading_update(
+            client, 
+            channel_id, 
+            initial_response['ts'], 
+            original_message, 
+            index, 
+            header_text, 
+            "Original Message", 
+            user_id
+        )
+    except Exception as e:
+        logger.error(f"Error in regenerate_message action: {str(e)}")
+        say(f"❌ Sorry, something went wrong: {str(e)}")
 
 @app.action("email_message")
 def handle_email_message(ack, body, say, logger, client):
-    ack()
-    message = body["actions"][0]["value"]
-    user_id = body["user"]["id"]
-    channel_id = body["channel"]["id"]
-    
-    initial_response = say(text="Generating email 📨...", blocks=[])
-    
-    generate_with_loading_update(
-        client, 
-        channel_id, 
-        initial_response['ts'], 
-        message, 
-        3, 
-        "📧 Email  Generated", 
-        "Original Message", 
-        user_id
-    )
+    try:
+        ack()
+        message = body["actions"][0]["value"]
+        user_id = body["user"]["id"]
+        channel_id = body["channel"]["id"]
+        
+        initial_response = say(text="Generating email 📨...", blocks=[])
+        
+        generate_with_loading_update(
+            client, 
+            channel_id, 
+            initial_response['ts'], 
+            message, 
+            3, 
+            "📧 Email  Generated", 
+            "Original Message", 
+            user_id
+        )
+    except Exception as e:
+        logger.error(f"Error in email_message action: {str(e)}")
+        say(f"❌ Sorry, something went wrong: {str(e)}")
 
 @app.action("regenerate_email")
 def handle_regenerate_email(ack, body, say, logger, client):
-    ack()
-    original_message = body["actions"][0]["value"]
-    user_id = body["user"]["id"]
-    channel_id = body["channel"]["id"]
-    
-    initial_response = say(text="Regenerating email 📨...", blocks=[])
-    
-    generate_with_loading_update(
-        client, 
-        channel_id, 
-        initial_response['ts'], 
-        original_message, 
-        3, 
-        "🔄 Regenerated Email Version", 
-        "Original Message", 
-        user_id
-    )
+    try:
+        ack()
+        original_message = body["actions"][0]["value"]
+        user_id = body["user"]["id"]
+        channel_id = body["channel"]["id"]
+        
+        initial_response = say(text="Regenerating email 📨...", blocks=[])
+        
+        generate_with_loading_update(
+            client, 
+            channel_id, 
+            initial_response['ts'], 
+            original_message, 
+            3, 
+            "🔄 Regenerated Email Version", 
+            "Original Message", 
+            user_id
+        )
+    except Exception as e:
+        logger.error(f"Error in regenerate_email action: {str(e)}")
+        say(f"❌ Sorry, something went wrong: {str(e)}")
 
 
 @flask_app.route("/")
@@ -484,4 +565,16 @@ def slack_events():
     return handler.handle(request)
 
 if __name__ == "__main__":
+    # Check required environment variables
+    required_env_vars = ["SLACK_BOT_TOKEN", "SLACK_SIGNING_SECRET", "GEMINI_API_KEY"]
+    missing_vars = [var for var in required_env_vars if not os.environ.get(var)]
+    
+    if missing_vars:
+        print(f"❌ Missing required environment variables: {', '.join(missing_vars)}")
+        print("Please set these environment variables before running the bot.")
+        exit(1)
+    
+    print("✅ All required environment variables are set")
+    print("🤖 Starting Corporate Translator Bot...")
+    
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))

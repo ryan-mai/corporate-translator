@@ -416,5 +416,10 @@ def handle_regenerate_email(ack, body, say, logger, client):
 def slack_events():
     return handler.handle(request)
 
+@flask_app.route("/slack/events", methods=["GET"])
+def slack_verification():
+    # Handle Slack URL verification
+    return "OK", 200
+
 # For Vercel deployment
 app = flask_app 

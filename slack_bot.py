@@ -220,79 +220,114 @@ def create_final_blocks(header_text, user_message, input_description, user_id, r
 
 def generate_with_loading_update(client, channel_id, ts, user_message, index, header_text, input_description, user_id, is_link=False):
     try:
-        loading_blocks = create_loading_blocks(header_text, user_message, input_description, user_id, is_link)
+        logger.info(f"Starting generate_with_loading_update for channel {channel_id}, ts {ts}")
+        logger.info(f"User message: {user_message[:50]}...")
+        logger.info(f"Index: {index}, is_link: {is_link}")
         
+        loading_blocks = create_loading_blocks(header_text, user_message, input_description, user_id, is_link)
+        logger.info("Created loading blocks")
+        
+        logger.info("Updating message with loading blocks")
         client.chat_update(
             channel=channel_id,
             ts=ts,
             blocks=loading_blocks,
             text="Generating response to your annoying boss... 👊"
         )
+        logger.info("Loading blocks updated successfully")
         
+        logger.info("Calling generate function")
         response = generate(user_message, index)
+        logger.info(f"Generate function returned: {response[:50]}...")
         
         if not response or response.strip() == "":
+            logger.error("AI generated an empty response")
             raise Exception("AI generated an empty response")
         
+        logger.info("Creating final blocks")
         final_blocks = create_final_blocks(header_text, user_message, input_description, user_id, response, index, is_link)
+        logger.info("Final blocks created")
         
+        logger.info("Updating message with final blocks")
         client.chat_update(
             channel=channel_id,
             ts=ts,
             blocks=final_blocks,
             text=f"Generated response: {response}"
         )
+        logger.info("Final blocks updated successfully")
         
         return response
     except Exception as e:
-        error_blocks = [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"❌ *Error generating response:* {str(e)}"
-                }
-            },
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"Requested by <@{user_id}> | Corporate Translator"
-                    }
-                ]
-            }
-        ]
+        logger.error(f"Error in generate_with_loading_update: {str(e)}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         
-        client.chat_update(
-            channel=channel_id,
-            ts=ts,
-            blocks=error_blocks,
-            text=f"Error: {str(e)}"
-        )
+        try:
+            error_blocks = [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"❌ *Error generating response:* {str(e)}"
+                    }
+                },
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": f"Requested by <@{user_id}> | Corporate Translator"
+                        }
+                    ]
+                }
+            ]
+            
+            client.chat_update(
+                channel=channel_id,
+                ts=ts,
+                blocks=error_blocks,
+                text=f"Error: {str(e)}"
+            )
+            logger.info("Error message sent to Slack")
+        except Exception as update_error:
+            logger.error(f"Failed to send error message to Slack: {str(update_error)}")
+        
         raise e
 
 @app.command("/tellboss")
 def handle_tellboss_command(ack, say, command, logger, client):
     try:
+        logger.info(f"Received /tellboss command from user {command.get('user_id', 'unknown')}")
+        logger.info(f"Command text: {command.get('text', '')}")
+        
         ack()
+        logger.info("Acknowledged command")
         
         user_input = command["text"]
         if not user_input or user_input.strip() == "":
+            logger.info("Empty command text, sending usage message")
             say("Usage: `/tellboss [your message or Slack message link]`\nExample: `/tellboss Gimme a raise`")
             return
         
+        logger.info(f"Processing user input: {user_input}")
         user_message, is_link = process_input(client, user_input)
+        logger.info(f"Processed input - message: {user_message[:50]}..., is_link: {is_link}")
         
         if is_link and user_message is None:
+            logger.warning("Invalid link provided")
             say("❌ Please send a valid link or check again!")
             return
         
         input_description = "Message from link" if is_link else "Your Message"
         header_text = "📢 Message for Your Boss 😁"
         
+        logger.info("Sending initial response")
         initial_response = say(text="Sending your request to AI 🤖...", blocks=[])
+        logger.info(f"Initial response sent with ts: {initial_response.get('ts', 'unknown')}")
         
+        logger.info("Starting generate_with_loading_update")
         generate_with_loading_update(
             client, 
             command['channel_id'], 
@@ -304,9 +339,16 @@ def handle_tellboss_command(ack, say, command, logger, client):
             command['user_id'], 
             is_link
         )
+        logger.info("Command completed successfully")
     except Exception as e:
         logger.error(f"Error in /tellboss command: {str(e)}")
-        say(f"❌ Sorry, something went wrong: {str(e)}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        try:
+            say(f"❌ Sorry, something went wrong: {str(e)}")
+        except:
+            logger.error("Failed to send error message to Slack")
 
 @app.command("/tldr")
 def handle_tldr_command(ack, say, command, logger, client):
@@ -552,17 +594,85 @@ def home():
             <p style="text-align: center; color: #7f8c8d;">
                 Add this bot to your Slack workspace to start translating corporate speak! 🚀
             </p>
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="/debug" style="color: #3498db; text-decoration: none;">🔧 Debug Info</a>
+            </div>
         </div>
     </body>
     </html>
     """
 
+@flask_app.route("/debug")
+def debug():
+    import os
+    env_vars = {
+        "SLACK_BOT_TOKEN": "✅ Set" if os.environ.get("SLACK_BOT_TOKEN") else "❌ Not Set",
+        "SLACK_SIGNING_SECRET": "✅ Set" if os.environ.get("SLACK_SIGNING_SECRET") else "❌ Not Set",
+        "GEMINI_API_KEY": "✅ Set" if os.environ.get("GEMINI_API_KEY") else "❌ Not Set",
+    }
+    
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Debug Info</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }}
+            .container {{ max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+            h1 {{ color: #2c3e50; text-align: center; }}
+            .status {{ background: #27ae60; color: white; padding: 10px; border-radius: 5px; text-align: center; margin: 20px 0; }}
+            .env-var {{ margin: 10px 0; padding: 10px; background: #ecf0f1; border-radius: 5px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🔧 Debug Information</h1>
+            <div class="status">
+                Bot Status: ✅ Running
+            </div>
+            <h3>Environment Variables:</h3>
+            {''.join([f'<div class="env-var"><strong>{key}:</strong> {value}</div>' for key, value in env_vars.items()])}
+            <p style="text-align: center; margin-top: 20px;">
+                <a href="/" style="color: #3498db; text-decoration: none;">← Back to Home</a>
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+
+@flask_app.route("/test")
+def test():
+    """Simple test endpoint to verify the bot is working."""
+    try:
+        from translator import generate
+        test_result = generate("test message", 0)
+        return {
+            "status": "success",
+            "message": "Bot is working correctly",
+            "test_result": test_result[:100] + "..." if len(test_result) > 100 else test_result
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
-    if request.json and "challenge" in request.json:
-        return request.json["challenge"]
+    logger.info("Received Slack event request")
+    logger.info(f"Request headers: {dict(request.headers)}")
+    logger.info(f"Request method: {request.method}")
     
-    return handler.handle(request)
+    try:
+        if request.json and "challenge" in request.json:
+            logger.info("Handling URL verification challenge")
+            return request.json["challenge"]
+        
+        logger.info("Handling Slack event")
+        return handler.handle(request)
+    except Exception as e:
+        logger.error(f"Error in slack_events: {str(e)}")
+        return {"error": str(e)}, 500
 
 if __name__ == "__main__":
     # Check required environment variables

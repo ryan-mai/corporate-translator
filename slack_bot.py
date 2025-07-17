@@ -246,7 +246,7 @@ def handle_tldr_command(ack, say, command, logger, client):
     
     user_input = command["text"]
     if not user_input or user_input.strip() == "":
-        say("Usage: `/tldr [your message or Slack message link]`\nExample: `/tldr Let's circle back to this after we align on our Q3 priorities.`\nOr: `/tldr https://workspace.slack.com/archives/C1234567890/p1234567890123456`")
+        say("Usage: `/tldr [your message or Slack message link]`\nExample: `/tldr Let's circle back to this after we align on our Q3 priorities.`\nOr: `/tldr https://seriousbusinessstuff.slack.com/archives/C095U1VSJCC/p1752617814329239`")
         return
     
     user_message, is_link = process_input(client, user_input)

@@ -427,7 +427,7 @@ def home():
     </head>
     <body>
         <h1>Corporate Translator Bot is up and alive and saving you from your corporate boss! 🟢</h1>
-        <p>Change environment variable? <a href="/key">Edit.</a></p>
+        <p>Change environment variable? <a href="/api_key">Edit.</a></p>
     </body>
     </html>
     """

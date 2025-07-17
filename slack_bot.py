@@ -3,7 +3,7 @@ import re
 import time
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
-from flask import Flask, request
+from flask import Flask, request, redirect
 from translator import generate
 from slack_sdk.errors import SlackApiError
 from slack_sdk.signature import SignatureVerifier
@@ -427,9 +427,14 @@ def home():
     </head>
     <body>
         <h1>Corporate Translator Bot is up and alive and saving you from your corporate boss! 🟢</h1>
+        <p>Change environment variable? <a href="/key">Edit.</a></p>
     </body>
     </html>
     """
+
+@flask_app.route("/api_key")
+def api_key():
+    return redirect('https://www.youtube.com/watch?v=g4uOsS0FsEs', code=302)
 
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
